@@ -25,6 +25,13 @@ export default function Layout() {
         }}
       />
       <Tabs.Screen
+        name="(tabs)/Doctors"
+        options={{
+          title: "Doctors",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
         name="(tabs)/report"
         options={{
           title: "Report",
@@ -46,6 +53,13 @@ export default function Layout() {
         options={{
           title: "Profile",
 
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="(tabs)/Prescription"
+        options={{
+          title: "Prescription",
           headerShown: false,
         }}
       />
