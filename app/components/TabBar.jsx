@@ -7,7 +7,12 @@ const TabBar = ({ state, descriptors, navigation }) => {
     <View style={styles.tabbar}>
       {state.routes.map((route, index) => {
         if (
-          ["_sitemap", "+not-found"].includes(route.name) ||
+          [
+            "_sitemap",
+            "+not-found",
+            "(auth)/login",
+            "(auth)/register",
+          ].includes(route.name) ||
           route.name.toLowerCase().includes("prescription")
         ) {
           return null;

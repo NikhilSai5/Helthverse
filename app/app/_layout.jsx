@@ -11,9 +11,10 @@ export default function Layout() {
 
   useEffect(() => {
     if (pathname === "/") {
-      router.push("/Homepage");
+      router.push("/login");
     }
   }, [pathname]);
+
   return (
     <Tabs tabBar={(props) => <TabBar {...props} />}>
       <Tabs.Screen
@@ -21,6 +22,20 @@ export default function Layout() {
         options={{
           title: "Home",
 
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="(auth)/login"
+        options={{
+          title: "login",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="(auth)/register"
+        options={{
+          title: "register",
           headerShown: false,
         }}
       />
