@@ -8,13 +8,137 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker"; // Added ImagePicker import
+import axios from "axios";
 
 const Prescription = () => {
+  const PINATA_API_KEY = "f36730eccc6083e13940";
+  const PINATA_SECRET_API_KEY =
+    "96bef77c91254cbc9dca216f791783de22889232028acd7c747b4d5d13eaf772";
+
+  // const uploadToPinata = async (imageUri) => {
+  //   try {
+  //     console.log("Uploading image to IPFS via Pinata...");
+
+  //     // First, get the file data as a blob
+  //     const response = await fetch(imageUri);
+  //     const blob = await response.blob();
+
+  //     // Create form data for Pinata API
+  //     const formData = new FormData();
+  //     formData.append("file", blob, "prescription.jpg");
+
+  //     // Add metadata for better organization
+  //     const metadata = JSON.stringify({
+  //       name: `prescription-${Date.now()}`,
+  //       keyvalues: {
+  //         type: "prescription",
+  //         timestamp: Date.now().toString(),
+  //       },
+  //     });
+  //     formData.append("pinataMetadata", metadata);
+
+  //     // Options for Pinata
+  //     const pinataOptions = JSON.stringify({
+  //       cidVersion: 1,
+  //     });
+  //     formData.append("pinataOptions", pinataOptions);
+
+  //     // Upload to Pinata
+  //     const res = await axios.post(
+  //       "https://api.pinata.cloud/pinning/pinFileToIPFS",
+  //       formData,
+  //       {
+  //         headers: {
+  //           "Content-Type": "multipart/form-data",
+  //           pinata_api_key: PINATA_API_KEY,
+  //           pinata_secret_api_key: PINATA_SECRET_API_KEY,
+  //         },
+  //       }
+  //     );
+
+  //     // Create IPFS URL using Pinata gateway
+  //     const ipfsUrl = `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+  //     console.log("Pinata upload successful:", ipfsUrl);
+
+  //     return ipfsUrl;
+  //   } catch (error) {
+  //     console.error("Error uploading to Pinata:", error);
+  //     return null;
+  //   }
+  // };
+
+  const uploadToPinata = async (imageUri) => {
+    try {
+      console.log("Uploading image to IPFS via Pinata...");
+
+      // Get file info and base64 data
+      const fileInfo = await FileSystem.getInfoAsync(imageUri);
+      if (!fileInfo.exists) {
+        throw new Error("File doesn't exist at path: " + imageUri);
+      }
+
+      const fileName = imageUri.split("/").pop();
+      const fileType =
+        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")
+          ? "image/jpeg"
+          : "image/png";
+
+      // Create form data
+      const formData = new FormData();
+      formData.append("file", {
+        uri: imageUri,
+        name: fileName,
+        type: fileType,
+      });
+
+      // Add metadata for better organization
+      const metadata = JSON.stringify({
+        name: `prescription-${Date.now()}`,
+        keyvalues: {
+          type: "prescription",
+          timestamp: Date.now().toString(),
+        },
+      });
+      formData.append("pinataMetadata", metadata);
+
+      // Options for Pinata
+      const pinataOptions = JSON.stringify({
+        cidVersion: 1,
+      });
+      formData.append("pinataOptions", pinataOptions);
+
+      // Upload to Pinata
+      const res = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            pinata_api_key: PINATA_API_KEY,
+            pinata_secret_api_key: PINATA_SECRET_API_KEY,
+            // These headers help ensure proper multipart form handling
+            Accept: "application/json",
+          },
+          transformRequest: [(data) => data], // Don't let axios transform the data
+        }
+      );
+
+      // Create IPFS URL using Pinata gateway
+      const ipfsUrl = `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+      console.log("Pinata upload successful:", ipfsUrl);
+
+      return ipfsUrl;
+    } catch (error) {
+      console.error("Error uploading to Pinata:", error.response || error);
+      return null;
+    }
+  };
   const [prescriptions, setPrescriptions] = useState([
     {
       id: "1",
@@ -90,28 +214,28 @@ const Prescription = () => {
     }
   };
 
-  //   const processPrescriptionImage = async (imageUri) => {
-  //     try {
-  //       setProcessing(true);
-  //       console.log("Processing prescription image...");
+  // const processPrescriptionImage = async (imageUri) => {
+  //   try {
+  //     setProcessing(true);
+  //     console.log("Processing prescription image...");
 
-  //       // Convert image to base64
-  //       const base64Image = await convertToBase64(imageUri);
-  //       if (!base64Image) {
-  //         throw new Error("Failed to convert image to base64");
-  //       }
+  //     // Convert image to base64
+  //     const base64Image = await convertToBase64(imageUri);
+  //     if (!base64Image) {
+  //       throw new Error("Failed to convert image to base64");
+  //     }
 
-  //       // Send to Gemini API
-  //       const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+  //     // Send to Gemini API
+  //     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-  //       const imagePart = {
-  //         inlineData: {
-  //           data: base64Image,
-  //           mimeType: "image/jpeg",
-  //         },
-  //       };
+  //     const imagePart = {
+  //       inlineData: {
+  //         data: base64Image,
+  //         mimeType: "image/jpeg",
+  //       },
+  //     };
 
-  //       const prompt = `
+  //     const prompt = `
   // Analyze this prescription image and extract all information in a structured JSON format.
 
   // Please return ONLY a valid JSON object with the following structure:
@@ -123,7 +247,7 @@ const Prescription = () => {
   //       "schedule": "When to take it",
   //       "instructions": "Additional instructions",
   //       "duration": "How long to take it",
-  //       "remaining": 30 (default to 30 if not specified)
+
   //     }
   //   ],
   //   "doctor": "Doctor's name if visible",
@@ -131,55 +255,48 @@ const Prescription = () => {
   //   "date": "Prescription date if visible (YYYY-MM-DD format)"
   // }
 
-  // Do not include any explanation, notes, or additional text outside the JSON object. The JSON must be valid and properly formatted.
-
+  // Do not include any explanation, notes, or additional text outside the JSON object. The JSON must be valid and properly formatted. Do not wrap the JSON in markdown code blocks.
   // `;
-  //       console.log("Making Gemini API request...");
-  //       const response = await model.generateContent([prompt, imagePart]);
-  //       const result = response.response.text();
+  //     console.log("Making Gemini API request...");
+  //     const response = await model.generateContent([prompt, imagePart]);
+  //     let result = response.response.text();
 
-  //       try {
-  //         // Parse the JSON response
-  //         const prescriptionData = JSON.parse(result);
-  //         console.log("Successfully parsed prescription data:", prescriptionData);
-
-  //         // Create new prescription entry
-  //         const newPrescription = {
-  //           id: String(Date.now()),
-  //           image: imageUri,
-  //           date: prescriptionData.date || new Date().toISOString().split("T")[0],
-  //           medicines: prescriptionData.medicines || [],
-  //           doctor: prescriptionData.doctor || "",
-  //           hospital: prescriptionData.hospital || "",
-  //         };
-
-  //         // Add to prescriptions list
-  //         setPrescriptions([newPrescription, ...prescriptions]);
-  //       } catch (jsonError) {
-  //         console.error("Error parsing JSON from API response:", jsonError);
-  //         console.log("Raw response:", result);
-
-  //         // Handle invalid JSON by creating a basic prescription
-  //         const newPrescription = {
-  //           id: String(Date.now()),
-  //           image: imageUri,
-  //           date: new Date().toISOString().split("T")[0],
-  //           medicines: [
-  //             {
-  //               name: "Unknown Medicine",
-  //               dosage: "See prescription",
-  //               schedule: "As directed",
-  //               remaining: 30,
-  //             },
-  //           ],
-  //         };
-
-  //         setPrescriptions([newPrescription, ...prescriptions]);
+  //     try {
+  //       // Clean up the response if it contains markdown code blocks
+  //       if (result.includes("```")) {
+  //         // Extract the JSON from between code blocks
+  //         const jsonRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+  //         const match = result.match(jsonRegex);
+  //         if (match && match[1]) {
+  //           result = match[1];
+  //         } else {
+  //           // Try to remove just the backticks
+  //           result = result.replace(/```json|```/g, "").trim();
+  //         }
   //       }
-  //     } catch (error) {
-  //       console.error("Error processing prescription:", error);
 
-  //       // Create a fallback prescription
+  //       // Parse the JSON response
+  //       const prescriptionData = JSON.parse(result);
+  //       console.log("Successfully parsed prescription data:", prescriptionData);
+
+  //       // Create new prescription entry
+  //       const newPrescription = {
+  //         id: String(Date.now()),
+  //         image: imageUri,
+  //         date: prescriptionData.date || new Date().toISOString().split("T")[0],
+  //         medicines: prescriptionData.medicines || [],
+  //         doctor: prescriptionData.doctor || "",
+  //         hospital: prescriptionData.hospital || "",
+  //         duration: prescriptionData.duration || "",
+  //       };
+
+  //       // Add to prescriptions list
+  //       setPrescriptions([newPrescription, ...prescriptions]);
+  //     } catch (jsonError) {
+  //       console.error("Error parsing JSON from API response:", jsonError);
+  //       console.log("Raw response:", result);
+
+  //       // Handle invalid JSON by creating a basic prescription
   //       const newPrescription = {
   //         id: String(Date.now()),
   //         image: imageUri,
@@ -189,33 +306,266 @@ const Prescription = () => {
   //             name: "Unknown Medicine",
   //             dosage: "See prescription",
   //             schedule: "As directed",
-  //             remaining: 30,
+  //             duration: "Unknown",
   //           },
   //         ],
   //       };
 
   //       setPrescriptions([newPrescription, ...prescriptions]);
-  //     } finally {
-  //       setProcessing(false);
-  //       setCapturedImage(null);
-  //       setShowCamera(false);
   //     }
-  //   };
+  //   } catch (error) {
+  //     console.error("Error processing prescription:", error);
 
-  // Function to save the image locally
+  //     // Create a fallback prescription
+  //     const newPrescription = {
+  //       id: String(Date.now()),
+  //       image: imageUri,
+  //       date: new Date().toISOString().split("T")[0],
+  //       medicines: [
+  //         {
+  //           name: "Unknown Medicine",
+  //           dosage: "See prescription",
+  //           schedule: "As directed",
+  //           duration: "Unknown",
+  //         },
+  //       ],
+  //     };
+
+  //     setPrescriptions([newPrescription, ...prescriptions]);
+  //   } finally {
+  //     setProcessing(false);
+  //     setCapturedImage(null);
+  //     setShowCamera(false);
+  //   }
+  // };
+
+  // const processPrescriptionImage = async (imageUri) => {
+  //   try {
+  //     setProcessing(true);
+  //     console.log("Processing prescription image...");
+
+  //     // Convert image to base64 for Gemini AI
+  //     const base64Image = await convertToBase64(imageUri);
+  //     if (!base64Image) {
+  //       throw new Error("Failed to convert image to base64");
+  //     }
+
+  //     // Send to Gemini API for analysis
+  //     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+  //     const imagePart = {
+  //       inlineData: {
+  //         data: base64Image,
+  //         mimeType: "image/jpeg",
+  //       },
+  //     };
+
+  //     const prompt = `
+  // Analyze this prescription image and extract all information in a structured JSON format.
+
+  // Please return ONLY a valid JSON object with the following structure:
+  // {
+  //   "medicines": [
+  //     {
+  //       "name": "Medicine name",
+  //       "dosage": "Dosage amount",
+  //       "schedule": "When to take it",
+  //       "instructions": "Additional instructions",
+  //       "duration": "How long to take it"
+  //     }
+  //   ],
+  //   "doctor": "Doctor's name if visible",
+  //   "hospital": "Hospital/clinic name if visible",
+  //   "date": "Prescription date if visible (YYYY-MM-DD format)"
+  // }
+
+  // Do not include any explanation, notes, or additional text outside the JSON object. The JSON must be valid and properly formatted. Do not wrap the JSON in markdown code blocks.
+  // `;
+  //     console.log("Making Gemini API request...");
+  //     const response = await model.generateContent([prompt, imagePart]);
+  //     let result = response.response.text();
+
+  //     try {
+  //       // Clean up the response if it contains markdown code blocks
+  //       if (result.includes("```")) {
+  //         const jsonRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+  //         const match = result.match(jsonRegex);
+  //         if (match && match[1]) {
+  //           result = match[1];
+  //         } else {
+  //           result = result.replace(/```json|```/g, "").trim();
+  //         }
+  //       }
+
+  //       // Parse the JSON response
+  //       const prescriptionData = JSON.parse(result);
+  //       console.log("Successfully parsed prescription data:", prescriptionData);
+
+  //       // Show uploading status
+  //       setProcessing(true);
+
+  //       // Upload image to IPFS using Pinata
+  //       const ipfsUrl = await uploadToPinata(imageUri);
+  //       const imageUrl = ipfsUrl || imageUri; // Fallback to local URI if IPFS upload fails
+
+  //       // Create new prescription entry for local state
+  //       const newPrescription = {
+  //         id: String(Date.now()),
+  //         image: imageUrl,
+  //         date: prescriptionData.date || new Date().toISOString().split("T")[0],
+  //         medicines:
+  //           prescriptionData.medicines.map((med) => ({
+  //             ...med,
+  //             remaining: Math.floor(Math.random() * 30) + 5, // Add a random remaining count for UI display
+  //           })) || [],
+  //         doctor: prescriptionData.doctor || "",
+  //         hospital: prescriptionData.hospital || "",
+  //       };
+
+  //       // Add to local state prescriptions list
+  //       setPrescriptions([newPrescription, ...prescriptions]);
+
+  //       // Get user email from auth context or state
+  //       const userEmail = "user@example.com"; // Replace with actual user email from your auth system
+
+  //       try {
+  //         console.log("Saving prescription to database with IPFS URL...");
+
+  //         // Add timeout to the fetch request
+  //         const controller = new AbortController();
+  //         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+  //         const response = await fetch(
+  //           "http://10.12.48.52:3000/api/prescription/store",
+  //           {
+  //             method: "POST",
+  //             headers: {
+  //               "Content-Type": "application/json",
+  //             },
+  //             body: JSON.stringify({
+  //               image: imageUrl,
+  //               date: newPrescription.date,
+  //               medicines: newPrescription.medicines,
+  //               hospital: newPrescription.hospital || "",
+  //               userEmail: userEmail,
+  //             }),
+  //             signal: controller.signal,
+  //           }
+  //         );
+
+  //         clearTimeout(timeoutId);
+
+  //         if (!response.ok) {
+  //           throw new Error(
+  //             `Failed to save prescription to database: ${response.status}`
+  //           );
+  //         }
+
+  //         const savedData = await response.json();
+  //         console.log(
+  //           "Prescription saved successfully with IPFS link:",
+  //           savedData
+  //         );
+
+  //         // Show success message to user
+  //         Alert.alert(
+  //           "Success",
+  //           "Prescription saved successfully and pinned on IPFS!",
+  //           [{ text: "OK" }]
+  //         );
+  //       } catch (apiError) {
+  //         console.error("API Error:", apiError);
+
+  //         // Check if it's a timeout error
+  //         if (apiError.name === "AbortError") {
+  //           Alert.alert(
+  //             "Connection Timeout",
+  //             "Could not connect to the server. Your prescription is saved locally.",
+  //             [{ text: "OK" }]
+  //           );
+  //         } else {
+  //           Alert.alert(
+  //             "Sync Warning",
+  //             "Prescription is saved locally but could not be synced to server.",
+  //             [{ text: "OK" }]
+  //           );
+  //         }
+  //       }
+  //     } catch (jsonError) {
+  //       console.error("Error parsing JSON from API response:", jsonError);
+  //       console.log("Raw response:", result);
+
+  //       // Handle invalid JSON by creating a basic prescription
+  //       const newPrescription = {
+  //         id: String(Date.now()),
+  //         image: imageUri, // Using local URI as fallback
+  //         date: new Date().toISOString().split("T")[0],
+  //         medicines: [
+  //           {
+  //             name: "Unknown Medicine",
+  //             dosage: "See prescription",
+  //             schedule: "As directed",
+  //             duration: "Unknown",
+  //             instructions: "",
+  //             remaining: 10,
+  //           },
+  //         ],
+  //       };
+
+  //       setPrescriptions([newPrescription, ...prescriptions]);
+
+  //       Alert.alert(
+  //         "Processing Issue",
+  //         "Could not fully process prescription details. Basic information saved.",
+  //         [{ text: "OK" }]
+  //       );
+  //     }
+  //   } catch (error) {
+  //     console.error("Error processing prescription:", error);
+
+  //     // Create a fallback prescription
+  //     const newPrescription = {
+  //       id: String(Date.now()),
+  //       image: imageUri,
+  //       date: new Date().toISOString().split("T")[0],
+  //       medicines: [
+  //         {
+  //           name: "Unknown Medicine",
+  //           dosage: "See prescription",
+  //           schedule: "As directed",
+  //           duration: "Unknown",
+  //           instructions: "",
+  //           remaining: 10,
+  //         },
+  //       ],
+  //     };
+
+  //     setPrescriptions([newPrescription, ...prescriptions]);
+
+  //     Alert.alert(
+  //       "Error",
+  //       "There was a problem processing your prescription. A basic entry has been created.",
+  //       [{ text: "OK" }]
+  //     );
+  //   } finally {
+  //     setProcessing(false);
+  //     setCapturedImage(null);
+  //     setShowCamera(false);
+  //   }
+  // };
 
   const processPrescriptionImage = async (imageUri) => {
     try {
       setProcessing(true);
       console.log("Processing prescription image...");
 
-      // Convert image to base64
+      // Convert image to base64 for Gemini AI
       const base64Image = await convertToBase64(imageUri);
       if (!base64Image) {
         throw new Error("Failed to convert image to base64");
       }
 
-      // Send to Gemini API
+      // Send to Gemini API for analysis
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
       const imagePart = {
@@ -236,8 +586,7 @@ const Prescription = () => {
         "dosage": "Dosage amount",
         "schedule": "When to take it",
         "instructions": "Additional instructions",
-        "duration": "How long to take it",
-        
+        "duration": "How long to take it"
       }
     ],
     "doctor": "Doctor's name if visible",
@@ -254,13 +603,11 @@ const Prescription = () => {
       try {
         // Clean up the response if it contains markdown code blocks
         if (result.includes("```")) {
-          // Extract the JSON from between code blocks
           const jsonRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
           const match = result.match(jsonRegex);
           if (match && match[1]) {
             result = match[1];
           } else {
-            // Try to remove just the backticks
             result = result.replace(/```json|```/g, "").trim();
           }
         }
@@ -269,59 +616,185 @@ const Prescription = () => {
         const prescriptionData = JSON.parse(result);
         console.log("Successfully parsed prescription data:", prescriptionData);
 
-        // Create new prescription entry
+        // Ensure all medicines have required fields
+        const validatedMedicines = prescriptionData.medicines.map((med) => ({
+          ...med,
+          name: med.name || "Unknown Medicine",
+          dosage: med.dosage || "Not specified", // Ensure dosage always exists
+          schedule: med.schedule || "As directed",
+          instructions: med.instructions || "",
+          duration: med.duration || "Unknown",
+          remaining: Math.floor(Math.random() * 30) + 5,
+        }));
+
+        // Show uploading status
+        setProcessing(true);
+
+        // Upload image to IPFS using Pinata
+        const ipfsUrl = await uploadToPinata(imageUri);
+        const imageUrl = ipfsUrl || imageUri; // Fallback to local URI if IPFS upload fails
+
+        // Create new prescription entry for local state
         const newPrescription = {
           id: String(Date.now()),
-          image: imageUri,
+          image: imageUrl,
           date: prescriptionData.date || new Date().toISOString().split("T")[0],
-          medicines: prescriptionData.medicines || [],
+          medicines: validatedMedicines,
           doctor: prescriptionData.doctor || "",
           hospital: prescriptionData.hospital || "",
-          duration: prescriptionData.duration || "",
         };
 
-        // Add to prescriptions list
+        // Add to local state prescriptions list
         setPrescriptions([newPrescription, ...prescriptions]);
+
+        // Get user email from auth context or state
+        const userEmail = "user@example.com"; // Replace with actual user email from your auth system
+
+        try {
+          console.log("Saving prescription to database with IPFS URL...");
+
+          // Add timeout to the fetch request
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+          const response = await fetch(
+            "http://10.12.48.52:3000/api/prescription/store",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                image: imageUrl,
+                date: newPrescription.date,
+                medicines: validatedMedicines, // Use validated medicines with dosage
+                hospital: newPrescription.hospital || "",
+                userEmail: userEmail,
+              }),
+              signal: controller.signal,
+            }
+          );
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to save prescription to database: ${response.status}`
+            );
+          }
+
+          const savedData = await response.json();
+          console.log(
+            "Prescription saved successfully with IPFS link:",
+            savedData
+          );
+
+          // Show success message to user
+          Alert.alert(
+            "Success",
+            "Prescription saved successfully and pinned on IPFS!",
+            [{ text: "OK" }]
+          );
+        } catch (apiError) {
+          console.error("API Error:", apiError);
+
+          // Check if it's a timeout error
+          if (apiError.name === "AbortError") {
+            Alert.alert(
+              "Connection Timeout",
+              "Could not connect to the server. Your prescription is saved locally.",
+              [{ text: "OK" }]
+            );
+          } else {
+            Alert.alert(
+              "Sync Warning",
+              "Prescription is saved locally but could not be synced to server.",
+              [{ text: "OK" }]
+            );
+          }
+        }
       } catch (jsonError) {
         console.error("Error parsing JSON from API response:", jsonError);
         console.log("Raw response:", result);
 
+        // Create a fallback medicine object with all required fields
+        const fallbackMedicine = {
+          name: "Unknown Medicine",
+          dosage: "See prescription", // Ensure dosage is present
+          schedule: "As directed",
+          duration: "Unknown",
+          instructions: "",
+          remaining: 10,
+        };
+
         // Handle invalid JSON by creating a basic prescription
         const newPrescription = {
           id: String(Date.now()),
-          image: imageUri,
+          image: imageUri, // Using local URI as fallback
           date: new Date().toISOString().split("T")[0],
-          medicines: [
-            {
-              name: "Unknown Medicine",
-              dosage: "See prescription",
-              schedule: "As directed",
-              duration: "Unknown",
-            },
-          ],
+          medicines: [fallbackMedicine],
         };
 
         setPrescriptions([newPrescription, ...prescriptions]);
+
+        // Try to save the fallback prescription to the server
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+          await fetch("http://10.12.48.52:3000/api/prescription/store", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              image: imageUri,
+              date: newPrescription.date,
+              medicines: [fallbackMedicine], // Use fallback medicine with dosage
+              hospital: "",
+              userEmail: "user@example.com",
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+        } catch (err) {
+          console.error("Failed to save fallback prescription:", err);
+        }
+
+        Alert.alert(
+          "Processing Issue",
+          "Could not fully process prescription details. Basic information saved.",
+          [{ text: "OK" }]
+        );
       }
     } catch (error) {
       console.error("Error processing prescription:", error);
 
-      // Create a fallback prescription
+      // Create a fallback prescription with required fields
+      const fallbackMedicine = {
+        name: "Unknown Medicine",
+        dosage: "See prescription", // Ensure dosage is present
+        schedule: "As directed",
+        duration: "Unknown",
+        instructions: "",
+        remaining: 10,
+      };
+
       const newPrescription = {
         id: String(Date.now()),
         image: imageUri,
         date: new Date().toISOString().split("T")[0],
-        medicines: [
-          {
-            name: "Unknown Medicine",
-            dosage: "See prescription",
-            schedule: "As directed",
-            duration: "Unknown",
-          },
-        ],
+        medicines: [fallbackMedicine],
       };
 
       setPrescriptions([newPrescription, ...prescriptions]);
+
+      Alert.alert(
+        "Error",
+        "There was a problem processing your prescription. A basic entry has been created.",
+        [{ text: "OK" }]
+      );
     } finally {
       setProcessing(false);
       setCapturedImage(null);
