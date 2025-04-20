@@ -7,8 +7,12 @@ import {
   FlatList,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker"; // Added ImagePicker import
 
 const Prescription = () => {
   const [prescriptions, setPrescriptions] = useState([
@@ -66,34 +70,344 @@ const Prescription = () => {
   ]);
 
   const [showCamera, setShowCamera] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
 
-  // This function would be called when a picture is taken
-  const handleCapture = () => {
-    setShowCamera(false);
+  const GEMINI_API_KEY = "AIzaSyChLYW845Nu3kTrgizXvztf1Uxr12S32HE";
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-    const newPrescription = {
-      id: String(Date.now()),
-      image: "https://placeholder.com/new-prescription",
-      date: new Date().toISOString().split("T")[0],
-      medicines: [
-        { name: "New Medicine", dosage: "TBD", schedule: "TBD", remaining: 0 },
-      ],
-    };
-
-    setPrescriptions([newPrescription, ...prescriptions]);
+  const convertToBase64 = async (uri) => {
+    try {
+      console.log("Converting image to base64...");
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      console.log("Conversion successful!");
+      return base64;
+    } catch (error) {
+      console.error("Error converting image:", error);
+      return null;
+    }
   };
 
-  // Camera view component
+  //   const processPrescriptionImage = async (imageUri) => {
+  //     try {
+  //       setProcessing(true);
+  //       console.log("Processing prescription image...");
+
+  //       // Convert image to base64
+  //       const base64Image = await convertToBase64(imageUri);
+  //       if (!base64Image) {
+  //         throw new Error("Failed to convert image to base64");
+  //       }
+
+  //       // Send to Gemini API
+  //       const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+  //       const imagePart = {
+  //         inlineData: {
+  //           data: base64Image,
+  //           mimeType: "image/jpeg",
+  //         },
+  //       };
+
+  //       const prompt = `
+  // Analyze this prescription image and extract all information in a structured JSON format.
+
+  // Please return ONLY a valid JSON object with the following structure:
+  // {
+  //   "medicines": [
+  //     {
+  //       "name": "Medicine name",
+  //       "dosage": "Dosage amount",
+  //       "schedule": "When to take it",
+  //       "instructions": "Additional instructions",
+  //       "duration": "How long to take it",
+  //       "remaining": 30 (default to 30 if not specified)
+  //     }
+  //   ],
+  //   "doctor": "Doctor's name if visible",
+  //   "hospital": "Hospital/clinic name if visible",
+  //   "date": "Prescription date if visible (YYYY-MM-DD format)"
+  // }
+
+  // Do not include any explanation, notes, or additional text outside the JSON object. The JSON must be valid and properly formatted.
+
+  // `;
+  //       console.log("Making Gemini API request...");
+  //       const response = await model.generateContent([prompt, imagePart]);
+  //       const result = response.response.text();
+
+  //       try {
+  //         // Parse the JSON response
+  //         const prescriptionData = JSON.parse(result);
+  //         console.log("Successfully parsed prescription data:", prescriptionData);
+
+  //         // Create new prescription entry
+  //         const newPrescription = {
+  //           id: String(Date.now()),
+  //           image: imageUri,
+  //           date: prescriptionData.date || new Date().toISOString().split("T")[0],
+  //           medicines: prescriptionData.medicines || [],
+  //           doctor: prescriptionData.doctor || "",
+  //           hospital: prescriptionData.hospital || "",
+  //         };
+
+  //         // Add to prescriptions list
+  //         setPrescriptions([newPrescription, ...prescriptions]);
+  //       } catch (jsonError) {
+  //         console.error("Error parsing JSON from API response:", jsonError);
+  //         console.log("Raw response:", result);
+
+  //         // Handle invalid JSON by creating a basic prescription
+  //         const newPrescription = {
+  //           id: String(Date.now()),
+  //           image: imageUri,
+  //           date: new Date().toISOString().split("T")[0],
+  //           medicines: [
+  //             {
+  //               name: "Unknown Medicine",
+  //               dosage: "See prescription",
+  //               schedule: "As directed",
+  //               remaining: 30,
+  //             },
+  //           ],
+  //         };
+
+  //         setPrescriptions([newPrescription, ...prescriptions]);
+  //       }
+  //     } catch (error) {
+  //       console.error("Error processing prescription:", error);
+
+  //       // Create a fallback prescription
+  //       const newPrescription = {
+  //         id: String(Date.now()),
+  //         image: imageUri,
+  //         date: new Date().toISOString().split("T")[0],
+  //         medicines: [
+  //           {
+  //             name: "Unknown Medicine",
+  //             dosage: "See prescription",
+  //             schedule: "As directed",
+  //             remaining: 30,
+  //           },
+  //         ],
+  //       };
+
+  //       setPrescriptions([newPrescription, ...prescriptions]);
+  //     } finally {
+  //       setProcessing(false);
+  //       setCapturedImage(null);
+  //       setShowCamera(false);
+  //     }
+  //   };
+
+  // Function to save the image locally
+
+  const processPrescriptionImage = async (imageUri) => {
+    try {
+      setProcessing(true);
+      console.log("Processing prescription image...");
+
+      // Convert image to base64
+      const base64Image = await convertToBase64(imageUri);
+      if (!base64Image) {
+        throw new Error("Failed to convert image to base64");
+      }
+
+      // Send to Gemini API
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: "image/jpeg",
+        },
+      };
+
+      const prompt = `
+  Analyze this prescription image and extract all information in a structured JSON format.
+  
+  Please return ONLY a valid JSON object with the following structure:
+  {
+    "medicines": [
+      {
+        "name": "Medicine name",
+        "dosage": "Dosage amount",
+        "schedule": "When to take it",
+        "instructions": "Additional instructions",
+        "duration": "How long to take it",
+        
+      }
+    ],
+    "doctor": "Doctor's name if visible",
+    "hospital": "Hospital/clinic name if visible",
+    "date": "Prescription date if visible (YYYY-MM-DD format)"
+  }
+  
+  Do not include any explanation, notes, or additional text outside the JSON object. The JSON must be valid and properly formatted. Do not wrap the JSON in markdown code blocks.
+  `;
+      console.log("Making Gemini API request...");
+      const response = await model.generateContent([prompt, imagePart]);
+      let result = response.response.text();
+
+      try {
+        // Clean up the response if it contains markdown code blocks
+        if (result.includes("```")) {
+          // Extract the JSON from between code blocks
+          const jsonRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+          const match = result.match(jsonRegex);
+          if (match && match[1]) {
+            result = match[1];
+          } else {
+            // Try to remove just the backticks
+            result = result.replace(/```json|```/g, "").trim();
+          }
+        }
+
+        // Parse the JSON response
+        const prescriptionData = JSON.parse(result);
+        console.log("Successfully parsed prescription data:", prescriptionData);
+
+        // Create new prescription entry
+        const newPrescription = {
+          id: String(Date.now()),
+          image: imageUri,
+          date: prescriptionData.date || new Date().toISOString().split("T")[0],
+          medicines: prescriptionData.medicines || [],
+          doctor: prescriptionData.doctor || "",
+          hospital: prescriptionData.hospital || "",
+          duration: prescriptionData.duration || "",
+        };
+
+        // Add to prescriptions list
+        setPrescriptions([newPrescription, ...prescriptions]);
+      } catch (jsonError) {
+        console.error("Error parsing JSON from API response:", jsonError);
+        console.log("Raw response:", result);
+
+        // Handle invalid JSON by creating a basic prescription
+        const newPrescription = {
+          id: String(Date.now()),
+          image: imageUri,
+          date: new Date().toISOString().split("T")[0],
+          medicines: [
+            {
+              name: "Unknown Medicine",
+              dosage: "See prescription",
+              schedule: "As directed",
+              duration: "Unknown",
+            },
+          ],
+        };
+
+        setPrescriptions([newPrescription, ...prescriptions]);
+      }
+    } catch (error) {
+      console.error("Error processing prescription:", error);
+
+      // Create a fallback prescription
+      const newPrescription = {
+        id: String(Date.now()),
+        image: imageUri,
+        date: new Date().toISOString().split("T")[0],
+        medicines: [
+          {
+            name: "Unknown Medicine",
+            dosage: "See prescription",
+            schedule: "As directed",
+            duration: "Unknown",
+          },
+        ],
+      };
+
+      setPrescriptions([newPrescription, ...prescriptions]);
+    } finally {
+      setProcessing(false);
+      setCapturedImage(null);
+      setShowCamera(false);
+    }
+  };
+  const saveImage = async (imageUri) => {
+    try {
+      const filename = imageUri.split("/").pop(); // Extract file name
+      const newPath = `${FileSystem.documentDirectory}${filename}`; // New file path
+      await FileSystem.copyAsync({ from: imageUri, to: newPath });
+      return newPath; // Return saved file path
+    } catch (error) {
+      console.error("Error saving image:", error);
+      return null;
+    }
+  };
+
+  // Open camera function using ImagePicker
+  const openCamera = async () => {
+    try {
+      const permissionResult =
+        await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        alert("Permission to access the camera is required!");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 1,
+        allowsEditing: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const savedUri = await saveImage(result.assets[0].uri);
+        if (savedUri) {
+          setCapturedImage(savedUri);
+          await processPrescriptionImage(savedUri);
+        }
+      }
+    } catch (error) {
+      console.error("Error opening camera:", error);
+      setShowCamera(false);
+    }
+  };
+
+  // Open gallery function
+  const openGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const savedUri = await saveImage(result.assets[0].uri);
+        if (savedUri) {
+          setCapturedImage(savedUri);
+          await processPrescriptionImage(savedUri);
+        }
+      }
+    } catch (error) {
+      console.error("Error opening gallery:", error);
+    } finally {
+      setShowCamera(false);
+    }
+  };
+
+  // Modified CameraView component to show options for camera and gallery
   const CameraView = () => (
     <View style={styles.cameraContainer}>
-      <View style={styles.cameraPreview}>
-        <Text style={styles.cameraText}>Camera Preview</Text>
-        {/* This would be replaced with actual camera component */}
-      </View>
-      <View style={styles.cameraControls}>
-        <TouchableOpacity style={styles.captureButton} onPress={handleCapture}>
-          <Text style={styles.captureButtonText}>Capture Prescription</Text>
+      <View style={styles.cameraOptions}>
+        <Text style={styles.cameraOptionsTitle}>Capture Prescription</Text>
+        <Text style={styles.cameraOptionsSubtitle}>
+          Choose how you want to add your prescription
+        </Text>
+
+        <TouchableOpacity style={styles.optionButton} onPress={openCamera}>
+          <Text style={styles.optionButtonText}>📷 Take a Photo</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.optionButton} onPress={openGallery}>
+          <Text style={styles.optionButtonText}>🖼️ Choose from Gallery</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => setShowCamera(false)}
@@ -112,10 +426,15 @@ const Prescription = () => {
         <Text style={styles.medicineDetails}>
           {medicine.dosage} • {medicine.schedule}
         </Text>
+        {medicine.instructions && (
+          <Text style={styles.medicineInstructions}>
+            {medicine.instructions}
+          </Text>
+        )}
       </View>
       <View style={styles.remainingContainer}>
-        <Text style={styles.remainingCount}>{medicine.remaining}</Text>
-        <Text style={styles.remainingLabel}>remaining</Text>
+        <Text style={styles.remainingCount}>{medicine.duration}</Text>
+        <Text style={styles.remainingLabel}>Duration</Text>
       </View>
     </View>
   );
@@ -131,6 +450,9 @@ const Prescription = () => {
         <View style={styles.headerInfo}>
           <Text style={styles.dateText}>Prescribed on</Text>
           <Text style={styles.dateValue}>{prescription.date}</Text>
+          {prescription.doctor && (
+            <Text style={styles.doctorText}>Dr. {prescription.doctor}</Text>
+          )}
           <View style={styles.pillCountBadge}>
             <Text style={styles.pillCountText}>
               {prescription.medicines.length} medication
@@ -158,6 +480,16 @@ const Prescription = () => {
       <Text style={styles.emptyStateText}>
         Tap the button below to add your first prescription
       </Text>
+    </View>
+  );
+
+  // Processing overlay
+  const ProcessingOverlay = () => (
+    <View style={styles.processingOverlay}>
+      <View style={styles.processingContent}>
+        <ActivityIndicator size="large" color="#537FE7" />
+        <Text style={styles.processingText}>Processing prescription...</Text>
+      </View>
     </View>
   );
 
@@ -190,6 +522,7 @@ const Prescription = () => {
             <TouchableOpacity
               style={styles.floatingButton}
               onPress={() => setShowCamera(true)}
+              disabled={processing}
             >
               <Text style={styles.floatingButtonText}>
                 📷 Scan Prescription
@@ -197,6 +530,8 @@ const Prescription = () => {
             </TouchableOpacity>
           </>
         )}
+
+        {processing && <ProcessingOverlay />}
 
         {/* Space for floating navbar */}
         <View style={styles.navbarSpace} />
@@ -273,6 +608,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+    marginBottom: 4,
+  },
+  doctorText: {
+    fontSize: 14,
+    color: "#666",
     marginBottom: 8,
   },
   pillCountBadge: {
@@ -296,13 +636,6 @@ const styles = StyleSheet.create({
   medicineItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-  },
-  medicineItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -320,6 +653,12 @@ const styles = StyleSheet.create({
   medicineDetails: {
     fontSize: 14,
     color: "#666",
+    marginBottom: 2,
+  },
+  medicineInstructions: {
+    fontSize: 13,
+    color: "#888",
+    fontStyle: "italic",
   },
   remainingContainer: {
     alignItems: "center",
@@ -330,7 +669,7 @@ const styles = StyleSheet.create({
     borderRadius: 35,
   },
   remainingCount: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#537FE7", // dark theme color
   },
@@ -364,48 +703,54 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     flex: 1,
-    backgroundColor: "#000",
-  },
-  cameraPreview: {
-    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#222",
   },
-  cameraText: {
-    color: "white",
-    fontSize: 18,
-  },
-  cameraControls: {
-    padding: 20,
-    backgroundColor: "#111",
+  cameraOptions: {
+    width: "85%",
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
     alignItems: "center",
-    paddingBottom: 140, // Extra space for navbar
   },
-  captureButton: {
+  cameraOptionsTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+  },
+  cameraOptionsSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  optionButton: {
     backgroundColor: "#537FE7", // dark theme color
     paddingVertical: 16,
     paddingHorizontal: 30,
-    borderRadius: 30,
-    width: "80%",
+    borderRadius: 12,
+    width: "100%",
     alignItems: "center",
     marginBottom: 12,
   },
-  captureButtonText: {
+  optionButtonText: {
     color: "white",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
   cancelButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "#f5f5f5",
     paddingVertical: 12,
     paddingHorizontal: 30,
-    borderRadius: 30,
-    width: "60%",
+    borderRadius: 12,
+    width: "80%",
     alignItems: "center",
+    marginTop: 8,
   },
   cancelButtonText: {
-    color: "white",
+    color: "#666",
     fontSize: 16,
   },
   emptyState: {
@@ -427,6 +772,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
+  },
+  processingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  processingContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    width: "80%",
+  },
+  processingText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#333",
+    marginTop: 16,
   },
 });
 
